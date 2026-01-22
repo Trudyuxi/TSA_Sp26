@@ -38,10 +38,23 @@ Consider the data provided in the spreadsheet "Table_10.1_Renewable_Energy_Produ
 ```{r}
 #Importing data set
 #Importing data set without change the original file using read.xlsx
-energy_data1 <- read_excel(path="./Data/Table_10.1_Renewable_Energy_Production_and_Consumption_by_Source.xlsx",skip = 12, sheet="Monthly Data",col_names=FALSE) 
+file_path <- "./Data/Table_10.1_Renewable_Energy_Production_and_Consumption_by_Source.xlsx"
+
+energy_data1 <- read_excel(
+  path = file_path,
+  skip = 12,
+  sheet = "Monthly Data",
+  col_names = FALSE
+)
 
 #Now let's extract the column names from row 11
-read_col_names <- read_excel(path="./Data/Table_10.1_Renewable_Energy_Production_and_Consumption_by_Source.xlsx",skip = 10,n_max = 1, sheet="Monthly Data",col_names=FALSE) 
+read_col_names <- read_excel(
+  path = file_path,
+  skip = 10,
+  n_max = 1, 
+  sheet="Monthly Data",
+  col_names=FALSE
+)
 
 #Assign the column names to the data set
 colnames(energy_data1) <- read_col_names
@@ -158,13 +171,11 @@ q5_cor <- cor(q1_ts)
 q5_cor
 
 ```
-```markdown
 The correlation matrix shows a very strong positive correlation between total biomass energy production and total renewable energy production (around 0.97), indicating that these two series move closely together over time. This result is expected since biomass energy constitutes a substantial component of total renewable energy production.
 
 In contrast, hydroelectric power consumption exhibits very weak correlations with both biomass energy production and total renewable energy production, suggesting that hydropower dynamics are largely independent of biomass-related and overall renewable energy trends.
 
 Overall, only biomass energy production and total renewable energy production are strongly and significantly correlated, while hydroelectric power consumption is not meaningfully correlated with the other two series.
-```
 
 
 ## Question 6
@@ -188,13 +199,11 @@ Acf(q1_ts[, "Hydroelectric Power Consumption"],
     lag.max = 40,
     main = "ACF: Hydroelectric Power Consumption")
 ```
-```markdown
 The three time series do not exhibit the same autocorrelation behavior.
 
 Total Biomass Energy Production and Total Renewable Energy Production show very strong and slowly decaying positive autocorrelations across many lags, indicating strong persistence and trend-dominated, non-stationary behavior.
 
 In contrast, Hydroelectric Power Consumption displays an oscillating autocorrelation pattern with alternating positive and negative values and clear peaks at seasonal lags (around 12, 24, and 36), suggesting strong seasonal dynamics rather than a long-term trend.
-```
 
 
 ## Question 7
@@ -216,8 +225,6 @@ Pacf(q1_ts[, "Hydroelectric Power Consumption"],
      main = "PACF: Hydroelectric Power Consumption (Lag 1–40)")
 
 ```
-```markdown
 Compared to the ACF plots in Question 6, the PACF plots show a much clearer structure. While the ACF decays slowly over many lags due to strong persistence and trend, the PACF exhibits a dominant spike at lag 1 and significant seasonal spikes around lag 12. This indicates that most of the serial dependence can be explained by short-term (AR(1)) and seasonal effects, rather than long-range direct dependence.
 
 The three series do not exhibit exactly the same behavior. Total Biomass Energy Production and Total Renewable Energy Production show very similar PACF patterns, characterized by strong first-order dependence and seasonal effects. In contrast, Hydroelectric Power Consumption displays stronger seasonal dependence and weaker long-term persistence, reflecting its sensitivity to hydrological cycles rather than long-term growth trends.
-```
