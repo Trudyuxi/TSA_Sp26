@@ -1,0 +1,244 @@
+---
+title: "ENV 797 - Time Series Analysis for Energy and Environment Applications | Spring 2026"
+subtitle: "Assignment 7 - Due date 03/06/26"
+author: "Trudy"
+output: pdf_document
+geometry: margin=2.54cm
+---
+
+## Directions
+
+You should open the .rmd file corresponding to this assignment on RStudio. The file is available on our class repository on Github. And to do so you will need to fork our repository and link it to your RStudio.  
+
+Once you have the file open on your local machine the first thing you will do is rename the file such that it includes your first and last name (e.g., "LuanaLima_TSA_A07_Sp26.Rmd"). Then change "Student Name" on line 4 with your name. 
+
+Then you will start working through the assignment by  **creating code and output** that answer each question. Be sure to use this assignment document. Your report should contain the answer to each question and any plots/tables you obtained (when applicable).
+
+When you have completed the assignment, **Knit** the text and code into a single PDF file. Submit this pdf using Sakai. 
+
+Packages needed for this assignment: "forecast","tseries". Do not forget to load them before running your script, since they are NOT default packages.\\
+
+## Set up
+
+```{r}
+#Load/install required package here
+library(readr)
+library(forecast)
+library(ggplot2)
+library(cowplot)
+library(tseries)
+library(Kendall)
+
+```
+
+## Importing and processing the data set
+
+Consider the data from the file "Net_generation_United_States_all_sectors_monthly.csv". The data corresponds to the monthly net generation from January 2001 to December 2020 by source and is provided by the US Energy Information and Administration. **You will work with the natural gas column only**.
+
+
+### Q1
+
+Import the csv file and create a time series object for natural gas. Make you sure you specify the **start=** and **frequency=** arguments. Plot the time series over time, ACF and PACF.
+
+```{r}
+# Import data
+A7data <- read_csv(
+  "Data/Net_generation_United_States_all_sectors_monthly.csv",
+  skip = 4,
+  show_col_types = FALSE
+)
+
+# Reverse order 
+A7data <- A7data[nrow(A7data):1, ]
+
+# Extract natural gas column
+gas <- A7data$`natural gas thousand megawatthours`
+
+# Create time series object (THIS is the required function)
+gas_ts <- ts(gas,
+             start = c(2001, 1),
+             frequency = 12)
+
+# Plot time series
+autoplot(gas_ts) +
+  ggtitle("Monthly Natural Gas Net Generation") +
+  ylab("Thousand MWh") +
+  xlab("Year")
+
+# ACF
+Acf(gas_ts,
+    lag.max = 40,
+    main = "ACF of Monthly Natural Gas Net Generation")
+
+# PACF
+Pacf(gas_ts,
+     lag.max = 40,
+     main = "PACF of Monthly Natural Gas Net Generation")
+
+```
+
+### Q2
+
+Using the $decompose()$ and the $seasadj()$ functions create a series without the seasonal component, i.e., a deseasonalized natural gas series. Plot the deseasonalized series over time and corresponding ACF and PACF. Compare with the plots obtained in Q1.
+
+```{r}
+gas_dec <- decompose(gas_ts, type = "multiplicative") 
+
+gas_deseason <- seasadj(gas_dec)
+
+autoplot(gas_ts, series = "Original") +
+  autolayer(gas_deseason, series = "Deseasonalized") +
+  ggtitle("Original vs Deseasonalized Natural Gas Net Generation") +
+  xlab("Year") +
+  ylab("Thousand MWh")
+
+#Acf
+Acf_ng <- ggAcf(gas_ts, lag.max = 40) +
+  ggtitle("ACF of Original Natural Gas")
+
+Acf_deseasonal_ng <- ggAcf(gas_deseason, lag.max = 40) +
+  ggtitle("ACF of Deseasonalized Natural Gas")
+
+plot_grid(Acf_ng, Acf_deseasonal_ng, ncol = 1)
+
+#Pacf
+Pacf_ng <- ggPacf(gas_ts, lag.max = 40) +
+  ggtitle("PACF of Original Natural Gas")
+
+Pacf_deseasonal_ng <- ggPacf(gas_deseason, lag.max = 40) +
+  ggtitle("PACF of Deseasonalized Natural Gas")
+
+plot_grid(Pacf_ng, Pacf_deseasonal_ng, ncol = 1)
+
+```
+> Answer: After removing the seasonal component, the deseasonalized series becomes smoother and the strong repeating seasonal peaks observed in the original series largely disappear. However, the upward trend in the series still remains. In the ACF plot, the original series shows strong seasonal autocorrelation, especially around lag 12 and its multiples. After deseasonalization, these seasonal spikes are largely reduced, although the autocorrelations still decay slowly. Similarly, the PACF of the deseasonalized series still shows a strong spike at lag 1, while most other lags fall within the confidence bounds, suggesting the presence of a non-seasonal autoregressive structure.
+
+## Modeling the seasonally adjusted (i.e., the deseasonalized series)
+
+### Q3
+
+Run the ADF test and Mann Kendall test on the deseasonalized data from Q2. Report and explain the results.
+
+```{r}
+# ADF
+adf_gas <- adf.test(gas_deseason, alternative = "stationary")
+print(adf_gas)
+
+# Mann Kendall
+mk_gas <- MannKendall(gas_deseason)
+print(summary(mk_gas))
+
+```
+> Answer: The ADF test gives a Dickey–Fuller statistic of -4.4685 with a p-value which is less than 0.05, we reject the null hypothesis of a unit root and conclude that the deseasonalized series is stationary. The Mann–Kendall test shows a tau value of 0.841 with a p-value less than 2.22e-16, indicating a strong and statistically significant upward trend in the deseasonalized series.
+
+### Q4
+
+Using the plots from Q2 and test results from Q3 identify the ARIMA model parameters $p,d$ and $q$. Note that in this case because you removed the seasonal component prior to identifying the model you don't need to worry about seasonal component. Clearly state your criteria and any additional function in R you might use. DO NOT use the $auto.arima()$ function. You will be evaluated on ability to understand the ACF/PACF plots and interpret the test results.
+
+> Answer: Based on the ADF test in Q3, the deseasonalized series is stationary, where p-value = 0.01, so no differencing is required and d = 0. From the ACF and PACF plots of the deseasonalized series, the PACF shows a significant spike at lag 1 while the remaining lags fall within the confidence bounds. Meanwhile, the ACF decays gradually rather than cutting off. This pattern is characteristic of an autoregressive process of order 1. So, the appropriate non-seasonal ARIMA model is ARIMA (1,0,0).
+
+### Q5
+
+Use `Arima()` from package "forecast" to fit an ARIMA model to your series considering the order estimated in Q4. You should allow constants in the model, i.e., `include.mean = TRUE` or `include.drift=TRUE`. **Print the coefficients** in your report. Hint: use the `cat()` or `print()` function to print.
+
+```{r}
+fit_gas <- Arima(gas_deseason,
+                 order = c(1, 0, 0),
+                 include.mean = TRUE)
+
+print(fit_gas)
+
+cat("Coefficients:\n")
+print(coef(fit_gas))
+
+```
+> Answer: An ARIMA(1,0,0) model was fitted to the deseasonalized series using Arima() from the forecast package with include.mean = TRUE. The estimated coefficients are: AR(1) = 0.9883, Intercept (mean) = 92185.03. This indicates a strong autoregressive relationship, meaning the current value is highly dependent on its previous value.
+
+### Q6
+
+Now plot the residuals of the ARIMA fit from Q5 along with residuals ACF on the same window. You may use the $checkresiduals()$ function to get the plots. Do the residual series look like a white noise series? Why?
+
+```{r}
+checkresiduals(fit_gas)
+```
+> Answer: The residuals fluctuate around zero with no clear pattern, and most autocorrelations fall within the confidence bounds. The histogram also appears approximately normal. However, the Ljung–Box test yields a p-value of 0.0036, which is less than 0.05. Therefore, we reject the null hypothesis that the residuals are white noise. This indicates that there is still significant autocorrelation remaining, and the ARIMA(1,0,0) model does not fully capture the structure of the data.
+
+
+## Modeling the original series (with seasonality)
+
+### Q7
+
+Repeat Q3-Q6 for the original series (the complete series that has the seasonal component). Note that when you model the seasonal series, you need to specify the seasonal part of the ARIMA model as well, i.e., $P$, $D$ and $Q$.
+
+```{r}
+# ADF test for original series
+adf_orig <- adf.test(gas_ts, alternative = "stationary")
+print(adf_orig)
+
+# Mann-Kendall test
+mk_orig <- MannKendall(gas_ts)
+summary(mk_orig)
+
+fit_orig <- Arima(gas_ts,
+                  order = c(1,0,0),
+                  seasonal = c(0,1,1),
+                  include.mean = TRUE)
+
+print(fit_orig)
+coef(fit_orig)
+
+checkresiduals(fit_orig)
+```
+> Answer: The ADF test for the original series gives a p-value of 0.01, so we reject the null hypothesis of a unit root and conclude that the series is stationary. The Mann–Kendall test shows a significant upward trend (tau = 0.651, p less than 2.22e-16). The ACF of the original series shows strong seasonal spikes at lag 12, indicating seasonality. Based on the ACF and PACF patterns, a SARIMA(1,0,0)(0,1,1)[12] model was selected. The estimated coefficients are AR(1) = 0.9112 and seasonal MA(1) = -0.6346. Residual diagnostics show that the residuals fluctuate around zero, but the Ljung–Box test p-value is 0.04266, which is less than 0.05. Therefore, the residuals do not fully behave like white noise, suggesting that some autocorrelation remains and the model is improved but not perfect.
+
+
+### Q8
+
+Compare the residual series for Q7 and Q6. Can you tell which ARIMA model is better representing the Natural Gas Series? Is that a fair comparison? Explain your response.
+
+```{r}
+res_q6 <- residuals(fit_gas)
+res_q7 <- residuals(fit_orig)
+
+ts.plot(res_q6, res_q7,
+        col = c("blue","red"),
+        lty = 1:2,
+        ylab = "Residuals",
+        main = "Residual comparison: Q6 vs Q7")
+
+legend("topright",
+       legend = c("Q6: ARIMA(1,0,0)",
+                  "Q7: Seasonal ARIMA"),
+       col = c("blue","red"),
+       lty = 1:2)
+```
+
+> Answer: The residual series from both models fluctuate around zero and show similar variability over time. However, the residuals from the seasonal ARIMA model (Q7) appear slightly more stable and exhibit less visible structure. From the residual diagnostics, the seasonal ARIMA model provides a better fit. The residuals from Q7 resemble white noise more closely, with most autocorrelations within the confidence bounds. In contrast, the residuals from Q6 show some remaining autocorrelation, suggesting that the ARIMA(1,0,0) model may not fully capture the underlying structure of the data. Therefore, the seasonal ARIMA model (ARIMA(1,0,0)(0,1,1)[12]) is better at representing the natural gas series. However, this is not a completely fair comparison. The Q6 model is fitted to the deseasonalized series, while the Q7 model is fitted to the original series with seasonality included. Since the models are applied to different versions of the data, their residuals are not directly comparable.
+
+
+## Checking your model with the auto.arima()
+
+**Please** do not change your answers for Q4 and Q7 after you ran the $auto.arima()$. It is **ok** if you didn't get all orders correctly. You will not loose points for not having the same order as the $auto.arima()$.
+
+### Q9
+
+Use the $auto.arima()$ command on the **deseasonalized series** to let R choose the model parameter for you. What's the order of the best ARIMA model? Does it match what you specified in Q4?
+
+```{r}
+auto_model <- auto.arima(gas_deseason)
+auto_model
+
+```
+> Answer: Using auto.arima() on the deseasonalized series, the selected model is ARIMA(1,1,1)(0,0,1)[12]. This does not match the model specified in Q4, where an ARIMA(1,0,0) model was selected. The difference arises because Q4 was based on manual inspection of ACF and PACF plots, while auto.arima() selects the model by optimizing information criteria such as AICc. Interestingly, even though the series was deseasonalized, auto.arima() still includes a seasonal MA component. This suggests that some seasonal structure may still remain in the data or that the model selection process finds a seasonal term improves the fit.
+
+
+### Q10
+
+Use the $auto.arima()$ command on the **original series** to let R choose the model parameters for you. Does it match what you specified in Q7?
+
+```{r}
+auto_orig <- auto.arima(gas_ts)
+auto_orig
+```
+> Answer: Using auto.arima() on the original series, the selected model is ARIMA(1,0,0)(0,1,1)[12] with drift. This closely matches the model specified in Q7, which was ARIMA(1,0,0)(0,1,1)[12]. The only difference is the inclusion of a drift term in the auto.arima() model. Overall, both models have the same non-seasonal and seasonal structure, indicating that the manual model selection in Q7 is consistent with the automatic selection. The addition of drift suggests a slight deterministic trend in the series.
+
